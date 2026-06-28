@@ -19,18 +19,30 @@ app.get('/health', (req, res) => {
 
 app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }))
 
+import { prisma } from './db.js'
+
 app.get(
   '/auth/google/callback',
   passport.authenticate('google', { session: false, failureRedirect: '/' }),
-  (req, res) => {
-    const user = req.user as any
-    const token = jwt.sign(
-      {
-        id: user.id,
-        email: user.emails[0].value,
-        name: user.displayName,
-        avatar: user.photos[0].value,
+  async (req, res) => {
+    const profile = req.user as any
+
+    const user = await prisma.user.upsert({
+      where: { googleId: profile.id },
+      update: {
+        name: profile.displayName,
+        avatar: profile.photos[0].value,
       },
+      create: {
+        googleId: profile.id,
+        email: profile.emails[0].value,
+        name: profile.displayName,
+        avatar: profile.photos[0].value,
+      },
+    })
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, name: user.name, avatar: user.avatar },
       process.env.JWT_SECRET!,
       { expiresIn: '7d' }
     )
